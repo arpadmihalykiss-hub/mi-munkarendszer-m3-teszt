@@ -1,0 +1,3 @@
+M-3 KAPU TESZT
+id: M3-G-001
+status: synthetic
