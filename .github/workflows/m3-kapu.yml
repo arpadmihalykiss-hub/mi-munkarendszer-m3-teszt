@@ -1,0 +1,49 @@
+name: M-3 kapu
+
+# Fizetős API nélkül, titok nélkül fut. Minden, a main ágra érkező PR-re lefut
+# (nem csak pilot/ ágakra), így nincs ágnév-alapú kikerülés.
+# A szkript és a szabályok az ALAP ágból (trusted/) jönnek, a PR-ből (pr/) csak adatot olvasunk.
+# A PR kódját soha nem futtatjuk. Hiba vagy váratlan leállás esetén a job piros (fail-closed).
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions: {}
+
+concurrency:
+  group: m3-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  kapu:
+    name: M-3 kapu
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Alap ág (megbízható szkriptek)
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: trusted
+          persist-credentials: false
+      - name: PR merge-állapota (csak adat)
+        uses: actions/checkout@v5
+        with:
+          ref: refs/pull/${{ github.event.pull_request.number }}/merge
+          path: pr
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Kapu futtatása
+        id: gate
+        run: python3 trusted/.github/scripts/m2.py gate --pr-dir pr --policy trusted/.github/codex/policy.json --out gate-result.json
+      - name: Blokkoló verdikt (bukó kapu esetén a job piros)
+        run: |
+          python3 - <<'PY'
+          import json, sys
+          r = json.load(open("gate-result.json", encoding="utf-8"))
+          print("VERDIKT:", "PASS" if r["passed"] else "FAIL")
+          sys.exit(0 if r["passed"] else 1)
+          PY
